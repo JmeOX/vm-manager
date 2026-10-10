@@ -4,6 +4,7 @@
 GET {{baseUrl}}/health
 
 ### Login Admin
+# @name login
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
@@ -20,3 +21,10 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 { "email": "no-es-email", "password": "" }
+
+### ¿Quién soy? 
+GET {{baseUrl}}/auth/me
+Cookie: {{login.response.headers.Set-Cookie}}
+
+### Logout
+POST {{baseUrl}}/auth/logout
