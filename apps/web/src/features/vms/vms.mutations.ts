@@ -119,9 +119,12 @@ export function useCreateVm() {
     },
 
     onSuccess: (created, _input, context) => {
-      queryClient.setQueryData<Vm[]>(vmKeys.all, (old = []) =>
-        old.map((item) => (item.id === context?.tempId ? created : item))
-      );
+      queryClient.setQueryData<Vm[]>(vmKeys.all, (old = []) => {
+        const alreadyThere = old.some((item) => item.id === created.id);
+        return alreadyThere
+          ? old.filter((item) => item.id !== context?.tempId)
+          : old.map((item) => (item.id === context?.tempId ? created : item));
+      });
       toast.success(`${created.name} creada`);
     },
 

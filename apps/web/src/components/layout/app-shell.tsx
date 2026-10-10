@@ -3,7 +3,9 @@ import { LayoutDashboard, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useDevStore } from "@/stores/dev-store";
+import { useVmRealtime } from "@/features/vms/use-vm-realtime";
 import { UserMenu } from "./user-menu";
+import { LiveIndicator } from "./live-indicator";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -38,6 +40,7 @@ function SimulationBadge() {
 }
 
 export function AppShell() {
+  useVmRealtime();
   return (
     <div className="flex min-h-svh bg-background text-foreground">
       <aside className="sticky top-0 hidden h-svh w-60 shrink-0 flex-col gap-7 border-r bg-card px-4 py-5 md:flex">
@@ -68,10 +71,12 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-4 backdrop-blur md:px-8">
-          <div className="md:hidden">
-            <Brand />
+          <div className="flex items-center gap-3">
+            <div className="md:hidden">
+              <Brand />
+            </div>
+            <LiveIndicator />
           </div>
-          <div className="hidden md:block" />
           <div className="flex items-center gap-2">
             <SimulationBadge />
             <ThemeToggle />
