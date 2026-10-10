@@ -43,6 +43,7 @@ SPA para gestionar máquinas virtuales con roles (Administrador / Cliente), Opti
 
 - Node.js 20 o superior (incluye npm 10)
 - Git
+- Windows: clona el repo fuera de OneDrive y en una rutaa sin tildes (Ej. C:\dev). OneDrive bloquea archivos de node_modules y la instalación falla con EPERM
 
 ### Pasos
 
