@@ -16,17 +16,17 @@ export const vmCreateSchema = z.object({
       "3–32 caracteres: minúsculas, números y guiones; empieza con letra",
   }),
   cores: z
-    .number()
+    .number({ message: "Ingresa un número" })
     .int({ message: "Debe ser entero" })
     .min(1, { message: "Mínimo 1 core" })
     .max(64, { message: "Máximo 64 cores" }),
   ramGb: z
-    .number()
+    .number({ message: "Ingresa un número" })
     .int({ message: "Debe ser entero" })
     .min(1, { message: "Mínimo 1 GB" })
     .max(512, { message: "Máximo 512 GB" }),
   diskGb: z
-    .number()
+    .number({ message: "Ingresa un número" })
     .int({ message: "Debe ser entero" })
     .min(10, { message: "Mínimo 10 GB" })
     .max(4096, { message: "Máximo 4096 GB" }),
