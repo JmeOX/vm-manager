@@ -1,8 +1,16 @@
 # VM Manager — Prueba Técnica Full Stack (IFX)
 
+[![CI](https://github.com/JmeOX/vm-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/JmeOX/vm-manager/actions/workflows/ci.yml)
+
 SPA para gestionar máquinas virtuales con roles (Administrador / Cliente), Optimistic UI y actualizaciones en tiempo real, más una API REST de soporte con autenticación por cookie HttpOnly.
 
-> 🚧 Documentación en cierre: las secciones marcadas como *(pendiente)* se completan antes de la entrega.
+![Demo: el Administrador apaga una VM y la ventana del Cliente se actualiza en vivo; con "Simular fallos" el cambio se revierte](docs/screenshots/demo.gif)
+
+| Dashboard (oscuro) | Listado como Cliente (claro) | Validación en tiempo real | Móvil |
+| --- | --- | --- | --- |
+| ![Dashboard](docs/screenshots/dashboard-dark.png) | ![Listado del Cliente](docs/screenshots/vms-client-light.png) | ![Formulario](docs/screenshots/form-validation.png) | ![Móvil](docs/screenshots/mobile.png) |
+
+**Contenido:** [Características](#características) · [Inicio rápido](#inicio-rápido) · [Credenciales](#credenciales-de-prueba) · [Cómo probar](#cómo-probar-lo-importante) · [API](#probar-la-api) · [Arquitectura](#arquitectura) · [Decisiones](#decisiones-arquitectónicas) · [Seguridad](#seguridad) · [Testing](#testing) · [Bitácora de IA](#bitácora-de-ia)
 
 ---
 
@@ -39,7 +47,7 @@ SPA para gestionar máquinas virtuales con roles (Administrador / Cliente), Opti
 ### Pasos
 
 ```bash
-# 1. Instalar dependencias de todo el monorepo
+# 1. Instalar dependencias de todo el monorepo (también genera el cliente de Prisma)
 npm install
 
 # 2. Crear el archivo de variables de entorno de la API
@@ -104,7 +112,7 @@ La carpeta [`apps/api/http/`](apps/api/http/) contiene colecciones de peticiones
 
 Cada archivo incluye su propio login, porque REST Client no comparte variables entre archivos.
 
-> **Nota:** la cookie de sesión es `Secure`. Los navegadores aceptan cookies `Secure` en `http://localhost`, pero REST Client no las reenvía por HTTP. Por eso en `requests.http` la cookie del login se envía manualmente con `Cookie: {{login.response.headers.Set-Cookie}}`.
+> **Nota:** la cookie de sesión es `Secure`. Los navegadores aceptan cookies `Secure` en `http://localhost`, pero REST Client no las reenvía por HTTP. Por eso en los archivos `.http` la cookie del login se envía manualmente con `Cookie: {{login.response.headers.Set-Cookie}}`.
 
 ### Endpoints
 
@@ -159,7 +167,75 @@ Todos los errores siguen el formato `{ "error": { "code", "message", "details"? 
 
 ## Arquitectura
 
-*(pendiente: diagrama de componentes y de secuencia)*
+### Componentes: Cliente, API y servicio de tiempo real
+
+```mermaid
+flowchart LR
+  subgraph Browser["Navegador · SPA React"]
+    UI["Componentes<br/>páginas, VmCard, Dashboard"]
+    Cache[("Caché TanStack Query<br/>vmKeys.all")]
+    Http["lib/http<br/>fetch + cookie"]
+    Sock["lib/socket<br/>cliente Socket.io"]
+    UI -->|lee y deriva| Cache
+    UI -->|mutaciones optimistas| Cache
+    Cache --> Http
+    Sock -->|vm:created / updated / deleted| Cache
+  end
+  Vite["Proxy de Vite<br/>mismo origen :5173"]
+  subgraph Server["API Node · :4000"]
+    MW["Middlewares<br/>helmet · CORS · authenticate · authorize · validate"]
+    Svc["Services"]
+    Repo["Repository · Prisma"]
+    IO["Servidor Socket.io<br/>io.use: cookie → JWT"]
+    MW --> Svc --> Repo
+    Svc -->|emite después de guardar| IO
+  end
+  DB[("SQLite")]
+  Shared["packages/shared<br/>Zod · tipos · eventos"]
+  Http -->|REST /api + cookie HttpOnly| Vite
+  Vite --> MW
+  Sock <-->|WebSocket /socket.io| Vite
+  Vite <--> IO
+  Repo --> DB
+  Shared -.-> UI
+  Shared -.-> MW
+```
+
+- El navegador **solo habla con `localhost:5173`**; el proxy de Vite reenvía `/api` y `/socket.io` a la API. Así la cookie `SameSite=Strict` viaja tanto en las peticiones REST como en el handshake del socket.
+- La caché de TanStack Query es la **única fuente de verdad** de las VMs, con tres escritores: la carga inicial, las mutaciones optimistas y los eventos del socket. Listado, filtros y dashboard la leen y derivan lo que necesitan.
+
+### Secuencia: login, cambio optimista y tiempo real
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Navegador Admin
+  participant C as Navegador Cliente
+  participant API as API Express
+  participant DB as SQLite
+  participant WS as Socket.io
+  A->>API: POST /api/auth/login
+  API-->>A: 200 { user } + Set-Cookie HttpOnly (sin token en el body)
+  A->>WS: handshake (la cookie viaja sola)
+  C->>WS: handshake (la cookie viaja sola)
+  Note over A: Optimistic UI: la tarjeta cambia al instante
+  A->>API: PUT /api/vms/:id { status: RUNNING }
+  API->>DB: update
+  alt la base confirma
+    DB-->>API: ok
+    API-->>A: 200 Vm → toast de éxito
+    API->>WS: emit vm:updated
+    WS-->>C: vm:updated → la tarjeta cambia y se resalta
+    WS-->>A: vm:updated → se ignora si no es más nuevo
+  else la petición falla
+    API-->>A: error → rollback a la foto previa + toast
+    Note over C: no recibe nada: el cambio nunca existió
+  end
+```
+
+### Diseño previo
+
+Antes de escribir componentes se diseñó un mockup de escritorio y móvil (pantallas, estados y diferencias Admin/Cliente): [`design/VM Manager — Mockups.html`](design/) (abrir en el navegador).
 
 ### Estructura del monorepo
 
@@ -242,7 +318,7 @@ La sesión no está en un store: es estado del servidor (la cookie HttpOnly solo
 | Eventos emitidos desde el service **después** de confirmar en la base | Emitir antes de guardar, o desde el controller | Si la base falla (p. ej. nombre duplicado), ningún cliente recibe un cambio que nunca existió. Al estar en el service, la emisión ocurre igual sin importar quién invoque la operación |
 | Eventos de socket tipados en `packages/shared` | Nombres de evento como strings sueltos | Un error de tipeo en el nombre o en el payload no compila, ni en el servidor ni en el cliente |
 | Middleware `devSimulation` (solo desarrollo): latencia configurable y fallo a pedido con `x-simulate-failure: 1` | Probar el rollback apagando la API | Hace visibles la Optimistic UI y el rollback en local, donde la API responde en milisegundos y nunca falla. No tiene efecto en producción ni en tests |
-| Lógica del JWT centralizada en `lib/session.ts` | Firmar y verificar en cada lugar que lo necesite | Login, middleware y (más adelante) el socket usan las mismas funciones y opciones de cookie |
+| Lógica del JWT centralizada en `lib/session.ts` | Firmar y verificar en cada lugar que lo necesite | Login, middleware REST y el handshake del socket usan las mismas funciones y opciones de cookie |
 
 ### Frontend
 
@@ -309,11 +385,32 @@ En `NODE_ENV=test` se desactivan el rate limit y el modo demostración.
 
 Los tests verifican automáticamente que nada se rompa (localmente y en CI). Las colecciones de [`apps/api/http/`](apps/api/http/) sirven para explorar la API a mano, ver headers y tiempos de respuesta, probar el modo demostración y disparar eventos mientras corre la sonda del socket.
 
-*(pendiente: tests del frontend)*
+### Frontend
+
+Tests con Vitest + [Testing Library](https://testing-library.com/) (jsdom). La API se reemplaza por *mocks*, así que corren sin servidor y en milisegundos.
+
+```bash
+npm test -w apps/web
+```
+
+| Archivo | Qué verifica |
+| --- | --- |
+| [`vms.mutations.test.tsx`](apps/web/src/features/vms/vms.mutations.test.tsx) | **Optimistic UI**: encender cambia la caché antes de que responda el servidor y se **revierte** si la API falla (con toast de error); se mantiene si confirma; eliminar quita la VM al instante y la **restaura** si falla |
+| [`can.test.tsx`](apps/web/src/features/auth/can.test.tsx) | Para el **Cliente** el botón protegido **no existe en el DOM**; el Admin sí lo ve |
+| [`vm-form.test.tsx`](apps/web/src/features/vms/components/vm-form.test.tsx) | **Validación en tiempo real**: formato de nombre, nombre repetido, RAM negativa; el botón se habilita solo con datos válidos |
+
+### Integración continua
+
+[GitHub Actions](.github/workflows/ci.yml) ejecuta en cada push a `main`, desde una máquina limpia: `npm ci` → chequeo de tipos de los tres paquetes → todos los tests (API + frontend).
 
 ---
 
 ## Limitaciones y siguientes pasos
+
+- **VMs sin propietario:** todos los clientes ven todas las VMs (como define `GET /vms` en el enunciado). En un sistema real cada VM pertenecería a un cliente y el listado se filtraría por propietario.
+- **Sin paginación:** el listado trae todas las VMs; suficiente para decenas, no para miles (siguiente paso: paginación por cursor + búsqueda en el servidor).
+- **Porcentajes del dashboard:** son relativos a los recursos **asignados** a todas las VMs, no a la capacidad física de un host (no hay ese dato en el modelo).
+- **Sin pruebas end-to-end ni despliegue público:** siguientes pasos naturales: un flujo con Playwright y un despliegue en un solo servicio (Express sirviendo el build del front, para mantener el mismo origen y la cookie `SameSite=Strict`).
 
 - **Rate limit en memoria:** el contador vive en el proceso; se reinicia al reiniciar la API y no se comparte entre varias instancias. En producción se usaría un store compartido (p. ej. Redis).
 - **Logout con JWT stateless:** el logout elimina la cookie del navegador, pero el token sigue siendo válido hasta su expiración (8 h), porque el servidor no guarda sesiones. Mitigaciones posibles: expiración corta con *refresh tokens*, o una lista de tokens revocados (Redis / BD).
@@ -324,12 +421,40 @@ Los tests verifican automáticamente que nada se rompa (localmente y en CI). Las
 
 ### Herramientas utilizadas
 
-*(pendiente)*
+- **Claude (Anthropic)**, en modo conversacional, como guía técnica y par de programación: plan del proyecto, revisión de arquitectura, primera versión del código de cada paso (que yo integraba, ejecutaba y verificaba), mockups de escritorio y móvil, y borradores de esta documentación.
+- **VS Code + REST Client** para probar la API a mano, **Chrome DevTools** para verificar cookies, red, accesibilidad y modo móvil.
+- Las convenciones que seguí al trabajar con la IA están en [`AGENTS.md`](AGENTS.md).
 
 ### Qué delegué y dónde intervine
 
-*(pendiente)*
+Trabajé por pasos pequeños: para cada uno pedí qué problema resolvía y si era obligatorio o un extra, y no avancé hasta comprobarlo funcionando (con `.http`, DevTools o tests).
+
+**Delegué** el andamiaje y el código repetitivo (configuración, componentes de shadcn, primeras versiones de servicios, componentes y tests) y los borradores de documentación.
+
+**Intervine** en estas decisiones y correcciones:
+
+- **Herramientas:** cambié pnpm por npm workspaces para que el revisor no necesite instalar nada extra.
+- **Diseño antes de código:** antes de crear componentes pedí un mockup completo, y luego también la versión móvil. De ahí salieron el inventario de componentes, los estados (carga, vacío, error, optimista, en vivo) y la navegación móvil con barra inferior.
+- **Manejo de estado:** cuestioné por qué no usar Zustand si el enunciado evalúa "estado global". El resultado fue clasificar el estado (servidor → TanStack Query, cliente → Zustand, URL, formularios) y usar Zustand solo donde hay un motivo concreto (leerlo fuera de React y suscripciones por id).
+- **Sobreingeniería:** pedí distinguir lo obligatorio de lo extra; la capa *repository* y el hash ficticio contra *timing attacks* quedaron como decisiones conscientes y documentadas.
+- **Depuración:** `GET /me` respondía `401` en REST Client. La causa era que la cookie `Secure` no se reenvía por HTTP fuera del navegador. Lo resolví enviando la cookie de forma explícita, y documenté la limitación del logout con JWT *stateless*.
+- **Datos de prueba:** un `409` inesperado por una VM que quedó de una prueba anterior llevó a usar nombres aleatorios en las colecciones `.http`. Separé las colecciones por módulo y las mantuve junto a los tests porque cumplen otro propósito (exploración manual y demostración).
+- **UI:** detecté que el desplegable de sistema operativo se veía blanco en modo oscuro; se corrigió con colores explícitos en las opciones y `color-scheme: dark`.
+- **Verificar a la IA:** la IA sugirió desinstalar el paquete `cn` por considerarlo ajeno; al revisar los imports comprobé que es el paquete oficial de shadcn y se mantuvo. Desde entonces, ninguna dependencia se quita sin verificar su origen y quién la usa.
+- **Entrega:** revisión de secretos antes del primer push y CI para garantizar que el proyecto funciona en una máquina limpia.
 
 ### Prompts clave
 
-*(pendiente)*
+**1. Diseñar antes de construir**
+
+> "Antes de la creación de cualquier componente, ¿no crees necesario hacer un mockup de la aplicación?"
+>
+> Y después: "Requiero la versión mobile también."
+
+Resultado: 11 pantallas (6 de escritorio y 5 móviles) con los datos reales del seed, que fijaron la fidelidad visual y la lista de componentes antes de escribir código.
+
+**2. Cuestionar una decisión de arquitectura**
+
+> "Discusión técnica: ¿por qué no usar Zustand? ¿Y cuándo sí conviene usarlo? ¿Usar algún gestor de estado no es un requisito dentro de la prueba?"
+
+Resultado: la tabla de [Manejo de estado](#manejo-de-estado). Zustand quedó solo para el estado global del cliente (simulador de fallos leído desde el cliente HTTP y resaltado en vivo por tarjeta).
