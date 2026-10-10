@@ -75,3 +75,11 @@ Cookie: {{login.response.headers.Set-Cookie}}
 ### Eliminar la VM creada
 DELETE {{baseUrl}}/vms/{{createVm.response.body.$.id}}
 Cookie: {{login.response.headers.Set-Cookie}}
+
+### Apagar la VM con fallo simulado
+PUT {{baseUrl}}/vms/{{createVm.response.body.$.id}}
+Content-Type: application/json
+Cookie: {{login.response.headers.Set-Cookie}}
+x-simulate-failure: 1
+
+{ "status": "STOPPED" }

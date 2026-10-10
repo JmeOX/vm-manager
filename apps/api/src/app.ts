@@ -7,6 +7,7 @@ import { env } from "./config/env";
 import { authRouter } from "./modules/auth/auth.routes";
 import { vmsRouter } from "./modules/vms/vms.routes";
 import { errorHandler } from "./middleware/error-handler";
+import { devSimulation } from "./middleware/dev-simulation";
 
 export function createApp() {
   const app = express();
@@ -26,7 +27,7 @@ export function createApp() {
   });
 
   app.use("/api/auth", authRouter);
-  app.use("/api/vms", vmsRouter);
+  app.use("/api/vms", devSimulation, vmsRouter);
   app.use(errorHandler);
 
   return app;

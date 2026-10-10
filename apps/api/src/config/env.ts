@@ -12,6 +12,7 @@ const envSchema = z.object({
   JWT_EXPIRES_IN_HOURS: z.coerce.number().int().positive().default(8),
   CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
   DATABASE_URL: z.string().min(1),
+  SIMULATED_LATENCY_MS: z.coerce.number().int().min(0).max(10000).default(0),
 });
 
 const parsed = envSchema.safeParse(process.env);
