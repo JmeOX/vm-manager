@@ -35,3 +35,14 @@ export const vmCreateSchema = z.object({
 });
 
 export const vmUpdateSchema = vmCreateSchema.partial();
+
+export type VmCreateInput = z.infer<typeof vmCreateSchema>;
+export type VmUpdateInput = z.infer<typeof vmUpdateSchema>;
+export type VmOs = (typeof VM_OS)[number];
+export type VmStatus = (typeof VM_STATUS)[number];
+
+export interface Vm extends VmCreateInput {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}

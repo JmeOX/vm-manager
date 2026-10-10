@@ -11,6 +11,7 @@ const envSchema = z.object({
     .min(32, { message: "Debe tener al menos 32 caracteres" }),
   JWT_EXPIRES_IN_HOURS: z.coerce.number().int().positive().default(8),
   CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
+  DATABASE_URL: z.string().min(1),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -24,3 +25,5 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+export const COOKIE_NAME = "vm_session";

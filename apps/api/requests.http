@@ -1,0 +1,22 @@
+@baseUrl = http://localhost:4000/api
+
+### Health
+GET {{baseUrl}}/health
+
+### Login Admin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@ifx.test", "password": "Admin123!" }
+
+### Login con clave incorrecta
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@ifx.test", "password": "mala" }
+
+### Login con email inválido
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "no-es-email", "password": "" }
