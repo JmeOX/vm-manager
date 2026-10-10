@@ -158,6 +158,7 @@ vm-manager/
 | Prisma 6 + SQLite | PostgreSQL | Cero instalación para el revisor. Migrar a PostgreSQL = cambiar `provider` y `DATABASE_URL` y regenerar migraciones; el código de la API no cambia |
 | `role`, `os`, `status` como `String` en BD | Enums de BD | SQLite no tiene enums nativos; la integridad la garantizan los esquemas Zod antes de guardar |
 | Variables de entorno validadas con Zod al arrancar | Leer `process.env` directo | *Fail-fast*: la API no arranca si falta o es inválida una variable (p. ej. `JWT_SECRET` corto) |
+| `app.ts` (construye Express) separado de `server.ts` (abre el puerto) | Un solo `index.ts` con `app.listen` | Los tests usan la app completa con Supertest sin levantar un servidor real |
 | Capas `routes → controller → service → repository` | Lógica en las rutas | Cada capa tiene una responsabilidad: rutas y middlewares / HTTP / reglas de negocio / acceso a datos. El service no conoce HTTP ni Prisma, así que se reutiliza (p. ej. para emitir eventos de Socket.io) y el ORM se puede cambiar tocando solo el repository |
 | Orden de middlewares: `authenticate → authorize → validate → controller` | Validar antes de autorizar | Un Cliente recibe `403` sin importar el body enviado; no se revelan las reglas de validación a quien no tiene permiso |
 | Errores de unicidad detectados por el código Prisma `P2002` | Consultar si el nombre existe antes de guardar | Evita condiciones de carrera entre dos creaciones simultáneas; se traduce a `409` con `details` en el campo `name` |
@@ -198,7 +199,29 @@ vm-manager/
 
 ## Testing
 
-*(pendiente)*
+### API
+
+Tests de integración con [Vitest](https://vitest.dev/) y [Supertest](https://github.com/ladjs/supertest): hacen peticiones reales a la app de Express (sin abrir puerto) contra una base SQLite separada (`apps/api/prisma/test.db`), que se recrea con migraciones y seed antes de cada ejecución. La base de desarrollo no se toca.
+
+```bash
+npm test -w apps/api          # una ejecución
+npm run test:watch -w apps/api # modo observación
+```
+
+Cubren los requisitos que evalúa el enunciado:
+
+| Archivo | Qué verifica |
+| --- | --- |
+| [`auth.test.ts`](apps/api/tests/auth.test.ts) | Login devuelve usuario y rol **sin token en el body**; cookie con `HttpOnly`, `Secure` y `SameSite=Strict`; nunca expone `passwordHash`; `401` genérico con credenciales inválidas; `400` con detalle por campo; `/me` con y sin sesión; token manipulado → `401` |
+| [`vms.test.ts`](apps/api/tests/vms.test.ts) | `401` sin sesión; el Cliente lista pero recibe `403` al crear, actualizar o eliminar; CRUD completo del Admin; `409` por nombre duplicado (señalando el campo); `400` por RAM negativa, nombre inválido, body vacío o id no UUID; `404` si la VM no existe |
+
+En `NODE_ENV=test` se desactivan el rate limit y el modo demostración.
+
+### Tests automáticos vs. colecciones `.http`
+
+Los tests verifican automáticamente que nada se rompa (localmente y en CI). Las colecciones de [`apps/api/http/`](apps/api/http/) sirven para explorar la API a mano, ver headers y tiempos de respuesta, probar el modo demostración y disparar eventos mientras corre la sonda del socket.
+
+*(pendiente: tests del frontend)*
 
 ---
 
