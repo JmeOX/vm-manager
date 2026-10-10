@@ -2,13 +2,30 @@
 
 SPA para gestionar máquinas virtuales con roles (Administrador / Cliente), Optimistic UI y actualizaciones en tiempo real, más una API REST de soporte con autenticación por cookie HttpOnly.
 
-> 🚧 En construcción. Las secciones marcadas como *(pendiente)* se completan al final.
+> 🚧 Documentación en cierre: las secciones marcadas como *(pendiente)* se completan antes de la entrega.
 
 ---
 
 ## Características
 
-*(pendiente: checklist de requisitos del enunciado, en el mismo orden del PDF)*
+### Frontend
+
+- [x] **SPA en React** (Vite + TypeScript) con arquitectura por *features*.
+- [x] **Estética moderna y Dark Mode nativo**: tema claro / oscuro / sistema, sin destello al recargar; diseño responsive (escritorio y móvil) basado en un mockup previo.
+- [x] **Optimistic UI con rollback**: crear, editar, encender/apagar y eliminar se reflejan al instante y se revierten con un toast si la API falla (demostrable con el modo "Simular fallos").
+- [x] **Visualización de datos**: dashboard con la suma de Cores, RAM y Disco de las VMs encendidas, gráfico de barras (Recharts) por VM y estado de la flota.
+- [x] **Feedback visual**: skeletons con la forma real del contenido, toasts de éxito/error y *empty states* (sin datos, sin resultados, error con reintento).
+- [x] **Ruta pública**: Login.
+- [x] **Rutas privadas protegidas**: Dashboard, listado, creación y edición de VMs. Si el usuario es **Cliente**, los botones de crear, editar, eliminar y encender **no existen en el DOM**; las rutas de creación/edición lo redirigen.
+- [x] **Formulario con validación en tiempo real** (formato del nombre, rangos de cores/RAM/disco, nombre no repetido) usando los mismos esquemas que la API.
+- [x] **Tiempo real (plus)**: Socket.io autenticado; cuando un Admin cambia una VM, la tarjeta se actualiza en todas las pantallas conectadas con una animación de resaltado. Indicador de conexión "En vivo".
+
+### Backend
+
+- [x] **JWT en cookie `HttpOnly`, `Secure`, `SameSite=Strict`**; `POST /api/auth/login` devuelve solo el usuario y su rol (nunca el token).
+- [x] **CRUD de VMs protegido por middleware JWT** con autorización por rol (Admin escribe, Cliente solo lee).
+- [x] Buenas prácticas: validación con Zod en el servidor, errores uniformes, `helmet`, CORS restringido, rate limit en el login, variables de entorno validadas al arrancar.
+- [x] **Tests de integración** (Vitest + Supertest) de seguridad, roles, validación y CRUD.
 
 ---
 
@@ -60,6 +77,21 @@ Creadas por el seed (`apps/api/prisma/seed.ts`):
 | --- | --- | --- |
 | Administrador | `admin@ifx.test` | `Admin123!` |
 | Cliente | `cliente@ifx.test` | `Cliente123!` |
+
+---
+
+## Cómo probar lo importante
+
+Ideal con **dos sesiones a la vez**: una ventana normal del navegador (Administrador) y una ventana de **incógnito** (Cliente). Dos pestañas de la misma ventana no sirven: comparten la cookie de sesión.
+
+1. **Roles:** como Cliente no hay botones de crear, editar, eliminar ni encender (buscar "Eliminar" en DevTools → Elements da 0 resultados). Ir a `/vms/new` a mano redirige al listado.
+2. **Tiempo real:** el Admin apaga una VM en `/vms`; en la ventana del Cliente la tarjeta cambia y se resalta sin recargar. El Dashboard del Cliente actualiza sus totales y el gráfico.
+3. **Optimistic UI y rollback:** el Admin activa **Simular fallos (dev)** en su menú de usuario e intenta apagar o eliminar una VM: el cambio aparece al instante y a los ~800 ms se revierte con un toast de error. En la ventana del Cliente no pasa nada (el servidor nunca guardó el cambio).
+4. **Creación optimista:** el Admin crea una VM; aparece primera, semitransparente con "Guardando…", y luego se confirma. En el Cliente aparece resaltada.
+5. **Validación en tiempo real:** en "Nueva VM", escribir `Web_01` o una RAM de `-4` muestra el error al instante y deshabilita el botón.
+6. **Sesión segura:** recargar con `F5` mantiene la sesión; en DevTools → Application, `Local Storage` no tiene tokens y la cookie `vm_session` aparece marcada como `HttpOnly`.
+7. **Skeletons:** gracias a la latencia simulada de 800 ms, al entrar a `/vms` o al Dashboard se ven los skeletons.
+8. **Responsive:** en modo dispositivo móvil, la barra lateral se convierte en barra inferior.
 
 ---
 
@@ -165,11 +197,12 @@ apps/web/src/
 │  ├─ layout/           # AppShell (barra lateral / barra inferior), UserMenu
 │  └─ *.tsx             # Compartidos: PageHeader, EmptyState, ThemeToggle, FullScreenLoader
 ├─ features/
-│  ├─ auth/             # auth.api, useSession/useLogin/useLogout, LoginPage, guardias, Can
-│  ├─ dashboard/        # DashboardPage
-│  └─ vms/              # vms.api, vms.queries (vmKeys), filtros en URL, páginas y componentes
-├─ stores/              # Estado global del cliente (Zustand)
-└─ lib/                 # http (fetch + ApiError), utilidades
+│  ├─ auth/             # auth.api, useSession/useLogin/useLogout, LoginPage, guardias (Protected/RequireRole), Can
+│  ├─ dashboard/        # DashboardPage, useResourceTotals (derivado), StatTile, ResourceChart, FleetStatus, tabla
+│  └─ vms/              # vms.api, vms.queries (vmKeys), vms.mutations (optimistas), useVmRealtime,
+│                       # filtros en URL, VmListPage, VmFormPage y componentes (VmCard, VmForm, StatusBadge…)
+├─ stores/              # Zustand: dev-store (simular fallos), highlight-store (resaltado), realtime-store (conexión)
+└─ lib/                 # http (fetch + ApiError), socket (cliente Socket.io tipado), utilidades
 ```
 
 Dentro de cada feature: `*.api.ts` solo habla con la API (sin React), `*.queries.ts` / `use-*.ts` envuelven esas llamadas en hooks de TanStack Query, y los componentes solo consumen hooks.
@@ -219,6 +252,10 @@ La sesión no está en un store: es estado del servidor (la cookie HttpOnly solo
 | Proxy de Vite para `/api` y `/socket.io` | Llamar directo a `localhost:4000` con CORS | El navegador ve un **solo origen**: la cookie `SameSite=Strict` viaja sin configuración extra y no hay peticiones *cross-site* |
 | Tailwind CSS v4 + shadcn/ui (estilo Vega, primitivas Radix UI) | Librería de componentes cerrada (MUI, Chakra) | Los componentes se copian al proyecto y se adaptan; Radix aporta accesibilidad (teclado, foco, ARIA). Se mantuvieron las rutas por defecto de shadcn (`components/ui`, `lib`) para no pelear con la herramienta |
 | Tema claro/oscuro/sistema con script en `index.html` | Aplicar el tema solo desde React | El script aplica la clase `dark` antes del primer pintado: no hay destello claro al recargar en modo oscuro. La preferencia (no sensible) se guarda en `localStorage` |
+| Socket.io escribe en la **misma caché** de TanStack Query que la API y las mutaciones | Mantener una lista aparte para los eventos | Una sola fuente de verdad: listado, filtros y dashboard se actualizan solos. Se ignoran eventos con `updatedAt` más antiguo y se evita duplicar la VM que el propio Admin creó (el evento puede llegar antes o después de la respuesta HTTP) |
+| Totales del dashboard **derivados** de la lista (`useMemo`) | Guardarlos en un estado o pedirlos a un endpoint aparte | No hay nada que sincronizar: cambian solos con la Optimistic UI y con el socket |
+| Animación de resaltado con CSS (Tailwind + `tw-animate-css`) | Framer Motion | Una dependencia menos para una animación simple; respeta `prefers-reduced-motion` con `motion-safe:` |
+| Formulario con React Hook Form + el esquema compartido + regla local de nombre único | Validar solo al enviar | Errores mientras se escribe con las mismas reglas que la API; el nombre repetido se detecta antes del `409`, que queda como red de seguridad |
 | Tipografía Geist / Geist Mono (`@fontsource`) | Fuentes del sistema o CDN | Fidelidad con el mockup; fuentes servidas localmente, sin dependencia de terceros en tiempo de ejecución |
 | Mockup previo (escritorio y móvil) | Diseñar mientras se programa | Define pantallas, componentes, estados (carga, vacío, error, optimista, en vivo) y la diferencia Admin/Cliente antes de escribir código |
 
