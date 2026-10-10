@@ -11,6 +11,8 @@ import { VmCardSkeleton } from "./components/vm-card-skeleton";
 import { VmFilters } from "./components/vm-filters";
 import { useVmFilters } from "./use-vm-filters";
 import { useVms } from "./vms.queries";
+import { SavingFooter, VmCardActions } from "./components/vm-card-actions";
+import { isOptimisticVm } from "./vms.mutations";
 
 function NewVmButton() {
   return (
@@ -120,9 +122,25 @@ export function VmListPage() {
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {filtered.map((vm) => (
-                <VmCard key={vm.id} vm={vm} />
-              ))}
+              {filtered.map((vm) => {
+                const optimistic = isOptimisticVm(vm);
+                return (
+                  <VmCard
+                    key={vm.id}
+                    vm={vm}
+                    className={optimistic ? "opacity-55" : undefined}
+                    footer={
+                      optimistic ? (
+                        <SavingFooter />
+                      ) : (
+                        <Can role="ADMIN">
+                          <VmCardActions vm={vm} />
+                        </Can>
+                      )
+                    }
+                  />
+                );
+              })}
             </div>
           )}
         </>

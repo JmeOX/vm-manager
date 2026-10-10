@@ -5,6 +5,7 @@ import { RouterProvider } from "react-router";
 import { ThemeProvider } from "@/app/theme-provider";
 import { queryClient } from "@/app/query-client";
 import { router } from "@/app/router";
+import { Toaster } from "@/components/ui/sonner";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -12,6 +13,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <RouterProvider router={router} />
+        <Toaster position="bottom-right" mobileOffset={{ bottom: 80 }} />
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>

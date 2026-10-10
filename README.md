@@ -153,7 +153,40 @@ vm-manager/
    └─ shared/         # Esquemas Zod y tipos compartidos entre front y back
 ```
 
-*(pendiente: estructura de carpetas del frontend explicada)*
+### Estructura del frontend
+
+El frontend se organiza **por funcionalidad** (*feature*), no por tipo de archivo: todo lo de las VMs vive junto, y cada feature puede crecer sin tocar las demás.
+
+```
+apps/web/src/
+├─ app/                 # Arranque: router, queryClient, ThemeProvider
+├─ components/
+│  ├─ ui/               # Componentes de shadcn/ui (generados, adaptables)
+│  ├─ layout/           # AppShell (barra lateral / barra inferior), UserMenu
+│  └─ *.tsx             # Compartidos: PageHeader, EmptyState, ThemeToggle, FullScreenLoader
+├─ features/
+│  ├─ auth/             # auth.api, useSession/useLogin/useLogout, LoginPage, guardias, Can
+│  ├─ dashboard/        # DashboardPage
+│  └─ vms/              # vms.api, vms.queries (vmKeys), filtros en URL, páginas y componentes
+├─ stores/              # Estado global del cliente (Zustand)
+└─ lib/                 # http (fetch + ApiError), utilidades
+```
+
+Dentro de cada feature: `*.api.ts` solo habla con la API (sin React), `*.queries.ts` / `use-*.ts` envuelven esas llamadas en hooks de TanStack Query, y los componentes solo consumen hooks.
+
+### Manejo de estado
+
+No se eligió "un gestor de estado": se clasificó el estado y cada tipo usa la herramienta adecuada.
+
+| Tipo de estado | Ejemplos | Herramienta |
+| --- | --- | --- |
+| Del servidor (su dueño es la API) | Sesión (`/me`), lista de VMs | **TanStack Query**: caché global, carga, errores, invalidación y Optimistic UI con rollback |
+| Global del cliente | "Simular fallos", VMs resaltadas en vivo | **Zustand**: selectores (solo re-renderiza quien lee ese valor) y lectura fuera de React (`getState()` en el cliente HTTP) |
+| En la URL | Búsqueda y filtro por estado (`/vms?status=RUNNING&q=web`) | `useSearchParams`, validado: sobrevive al recargar y se puede compartir |
+| De formulario | Login, crear/editar VM | **React Hook Form** + `zodResolver` con los esquemas de `packages/shared` |
+| Local | Diálogos abiertos | `useState` |
+
+La sesión no está en un store: es estado del servidor (la cookie HttpOnly solo la puede validar la API), así que vive en TanStack Query y se rehidrata con `GET /api/auth/me`.
 
 ---
 
