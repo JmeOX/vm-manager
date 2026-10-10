@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias (exactamente las del package-lock)
+        run: npm ci
+
+      - name: Revisar tipos (shared, api, web)
+        run: npm run typecheck
+
+      - name: Tests (API con base SQLite temporal + frontend)
+        run: npm test
