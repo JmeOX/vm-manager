@@ -30,6 +30,7 @@ cp apps/api/.env.example apps/api/.env
 #    (en Windows PowerShell: Copy-Item apps/api/.env.example apps/api/.env)
 #    y reemplazar JWT_SECRET por un texto aleatorio de 32+ caracteres:
 #    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+#    SIMULATED_LATENCY_MS (opcional) agrega un retraso artificial en /api/vms para ver la Optimistic UI; 0 lo desactiva
 
 # 3. Crear la base de datos SQLite, aplicar migraciones y cargar datos de prueba
 npm run db:setup -w apps/api
@@ -77,6 +78,40 @@ Cada archivo incluye su propio login, porque REST Client no comparte variables e
 | `PUT /api/vms/:id` | Admin | `200 Vm` · `400` · `401` · `403` · `404` · `409` |
 | `DELETE /api/vms/:id` | Admin | `204` · `400` · `401` · `403` · `404` |
 
+### Eventos en tiempo real (Socket.io)
+
+El servidor de sockets comparte puerto con la API (`http://localhost:4000`, ruta `/socket.io`). Solo acepta conexiones con una cookie de sesión válida.
+
+| Evento (servidor → clientes) | Payload | Se emite cuando |
+| --- | --- | --- |
+| `vm:created` | `Vm` | Se crea una VM (después de guardarla en la base) |
+| `vm:updated` | `Vm` | Se actualiza una VM (después de guardarla) |
+| `vm:deleted` | `{ id }` | Se elimina una VM (después de borrarla) |
+
+Los eventos están tipados en [`packages/shared/src/socket-events.ts`](packages/shared/src/socket-events.ts) y los usan tanto el servidor como el cliente.
+
+### Probar el tiempo real sin frontend
+
+```bash
+# Terminal 1
+npm run dev -w apps/api
+
+# Terminal 2: inicia sesión como Cliente, abre el socket e imprime cada evento recibido
+npm run socket:probe -w apps/api
+
+# Sin cookie, la conexión se rechaza (UNAUTHENTICATED)
+npm run socket:probe -w apps/api -- --sin-cookie
+```
+
+Con la sonda abierta, ejecuta las peticiones de [`vms.http`](apps/api/http/vms.http) (crear, encender, eliminar): cada cambio aparece al instante en la terminal 2. Una petición que falla (p. ej. `409`) no emite evento.
+
+### Modo demostración (solo en desarrollo)
+
+Para que la Optimistic UI y su rollback se puedan ver en local, las rutas `/api/vms` pasan por el middleware [`devSimulation`](apps/api/src/middleware/dev-simulation.ts), activo **solo** con `NODE_ENV=development`:
+
+- **Latencia:** cada petición espera `SIMULATED_LATENCY_MS` (por defecto 800 ms en `.env.example`).
+- **Fallo a pedido:** una petición de escritura con el header `x-simulate-failure: 1` responde `503 SIMULATED_FAILURE` sin modificar la base.
+
 Todos los errores siguen el formato `{ "error": { "code", "message", "details"? } }`. En errores de validación, `details` es una lista `[{ "field", "message" }]` que el frontend muestra bajo cada campo.
 
 ---
@@ -93,15 +128,17 @@ vm-manager/
 │  ├─ api/            # API REST (Express 5 + Prisma + SQLite)
 │  │  ├─ http/        # Colecciones de peticiones (REST Client)
 │  │  ├─ prisma/      # schema.prisma, migraciones y seed
+│  │  ├─ scripts/     # socket-probe.ts: prueba el tiempo real desde la terminal
 │  │  └─ src/
 │  │     ├─ config/       # Variables de entorno validadas
 │  │     ├─ lib/          # Prisma client, HttpError, sesión (JWT + cookie)
-│  │     ├─ middleware/   # authenticate, authorize, validate, rate-limit, errorHandler
+│  │     ├─ middleware/   # authenticate, authorize, validate, rate-limit, devSimulation, errorHandler
 │  │     ├─ modules/
 │  │     │  ├─ auth/      # routes → controller → service
 │  │     │  └─ vms/       # routes → controller → service → repository
+│  │     ├─ realtime/     # Servidor Socket.io: autenticación del handshake y emisión de eventos
 │  │     ├─ app.ts        # Construye la app de Express (sin abrir puerto; usada por los tests)
-│  │     └─ server.ts     # Abre el puerto
+│  │     └─ server.ts     # Crea el servidor HTTP, monta Socket.io y abre el puerto
 │  └─ web/            # SPA (React + Vite)  (pendiente)
 └─ packages/
    └─ shared/         # Esquemas Zod y tipos compartidos entre front y back
@@ -125,6 +162,10 @@ vm-manager/
 | Orden de middlewares: `authenticate → authorize → validate → controller` | Validar antes de autorizar | Un Cliente recibe `403` sin importar el body enviado; no se revelan las reglas de validación a quien no tiene permiso |
 | Errores de unicidad detectados por el código Prisma `P2002` | Consultar si el nombre existe antes de guardar | Evita condiciones de carrera entre dos creaciones simultáneas; se traduce a `409` con `details` en el campo `name` |
 | `PUT /api/vms/:id` acepta actualizaciones parciales | `PATCH` | El enunciado define `PUT`; permitir campos parciales simplifica acciones como encender/apagar (`{ "status": "RUNNING" }`). Un body vacío se rechaza con `400` |
+| Socket.io sobre el mismo servidor HTTP que Express (`createServer(app)`) | Un servicio de tiempo real aparte | Un solo puerto y un solo origen: la cookie de sesión viaja también en el handshake del socket, sin configuración extra |
+| Eventos emitidos desde el service **después** de confirmar en la base | Emitir antes de guardar, o desde el controller | Si la base falla (p. ej. nombre duplicado), ningún cliente recibe un cambio que nunca existió. Al estar en el service, la emisión ocurre igual sin importar quién invoque la operación |
+| Eventos de socket tipados en `packages/shared` | Nombres de evento como strings sueltos | Un error de tipeo en el nombre o en el payload no compila, ni en el servidor ni en el cliente |
+| Middleware `devSimulation` (solo desarrollo): latencia configurable y fallo a pedido con `x-simulate-failure: 1` | Probar el rollback apagando la API | Hace visibles la Optimistic UI y el rollback en local, donde la API responde en milisegundos y nunca falla. No tiene efecto en producción ni en tests |
 | Lógica del JWT centralizada en `lib/session.ts` | Firmar y verificar en cada lugar que lo necesite | Login, middleware y (más adelante) el socket usan las mismas funciones y opciones de cookie |
 
 *(pendiente: decisiones del frontend)*
@@ -150,7 +191,8 @@ vm-manager/
 - Parámetros de URL validados (`:id` debe ser UUID) antes de consultar la base.
 - Bodies JSON limitados a 10 KB.
 
-*(pendiente: autenticación del socket)*
+- Socket.io autenticado: un middleware (`io.use`) lee la cookie `vm_session` del handshake y la verifica con la misma función que la API REST. Sin sesión válida, la conexión se rechaza y no se reciben datos de VMs.
+- CORS del socket restringido a `CLIENT_ORIGIN`.
 
 ---
 
