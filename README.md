@@ -55,7 +55,12 @@ Creadas por el seed (`apps/api/prisma/seed.ts`):
 
 ## Probar la API
 
-El archivo [`apps/api/requests.http`](apps/api/requests.http) contiene las peticiones listas para ejecutar con la extensión [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) de VS Code.
+La carpeta [`apps/api/http/`](apps/api/http/) contiene colecciones de peticiones listas para ejecutar con la extensión [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) de VS Code, una por módulo:
+
+- [`auth.http`](apps/api/http/auth.http): health, login (éxito, credenciales inválidas, validación), sesión, logout y CORS.
+- [`vms.http`](apps/api/http/vms.http): CRUD de VMs y permisos por rol (`200`, `201`, `204`, `400`, `403`, `404`, `409`).
+
+Cada archivo incluye su propio login, porque REST Client no comparte variables entre archivos.
 
 > **Nota:** la cookie de sesión es `Secure`. Los navegadores aceptan cookies `Secure` en `http://localhost`, pero REST Client no las reenvía por HTTP. Por eso en `requests.http` la cookie del login se envía manualmente con `Cookie: {{login.response.headers.Set-Cookie}}`.
 
@@ -64,11 +69,15 @@ El archivo [`apps/api/requests.http`](apps/api/requests.http) contiene las petic
 | Método y ruta | Acceso | Respuesta |
 | --- | --- | --- |
 | `GET /api/health` | Público | `200 { status }` |
-| `POST /api/auth/login` | Público | `200 { user }` + cookie HttpOnly |
-| `GET /api/auth/me` | Autenticado | `200 { user }` |
+| `POST /api/auth/login` | Público | `200 { user }` + cookie HttpOnly · `400` · `401` · `429` |
+| `GET /api/auth/me` | Autenticado | `200 { user }` · `401` |
 | `POST /api/auth/logout` | Público | `204` + cookie eliminada |
+| `GET /api/vms` | Admin, Cliente | `200 Vm[]` · `401` |
+| `POST /api/vms` | Admin | `201 Vm` · `400` · `401` · `403` · `409` nombre duplicado |
+| `PUT /api/vms/:id` | Admin | `200 Vm` · `400` · `401` · `403` · `404` · `409` |
+| `DELETE /api/vms/:id` | Admin | `204` · `400` · `401` · `403` · `404` |
 
-*(pendiente: endpoints de VMs)*
+Todos los errores siguen el formato `{ "error": { "code", "message", "details"? } }`. En errores de validación, `details` es una lista `[{ "field", "message" }]` que el frontend muestra bajo cada campo.
 
 ---
 
@@ -82,6 +91,17 @@ El archivo [`apps/api/requests.http`](apps/api/requests.http) contiene las petic
 vm-manager/
 ├─ apps/
 │  ├─ api/            # API REST (Express 5 + Prisma + SQLite)
+│  │  ├─ http/        # Colecciones de peticiones (REST Client)
+│  │  ├─ prisma/      # schema.prisma, migraciones y seed
+│  │  └─ src/
+│  │     ├─ config/       # Variables de entorno validadas
+│  │     ├─ lib/          # Prisma client, HttpError, sesión (JWT + cookie)
+│  │     ├─ middleware/   # authenticate, authorize, validate, rate-limit, errorHandler
+│  │     ├─ modules/
+│  │     │  ├─ auth/      # routes → controller → service
+│  │     │  └─ vms/       # routes → controller → service → repository
+│  │     ├─ app.ts        # Construye la app de Express (sin abrir puerto; usada por los tests)
+│  │     └─ server.ts     # Abre el puerto
 │  └─ web/            # SPA (React + Vite)  (pendiente)
 └─ packages/
    └─ shared/         # Esquemas Zod y tipos compartidos entre front y back
@@ -101,7 +121,11 @@ vm-manager/
 | Prisma 6 + SQLite | PostgreSQL | Cero instalación para el revisor. Migrar a PostgreSQL = cambiar `provider` y `DATABASE_URL` y regenerar migraciones; el código de la API no cambia |
 | `role`, `os`, `status` como `String` en BD | Enums de BD | SQLite no tiene enums nativos; la integridad la garantizan los esquemas Zod antes de guardar |
 | Variables de entorno validadas con Zod al arrancar | Leer `process.env` directo | *Fail-fast*: la API no arranca si falta o es inválida una variable (p. ej. `JWT_SECRET` corto) |
-| Capas `routes → controller → service` | Lógica en las rutas | El service no conoce HTTP; se puede probar y reutilizar (p. ej. desde Socket.io) |
+| Capas `routes → controller → service → repository` | Lógica en las rutas | Cada capa tiene una responsabilidad: rutas y middlewares / HTTP / reglas de negocio / acceso a datos. El service no conoce HTTP ni Prisma, así que se reutiliza (p. ej. para emitir eventos de Socket.io) y el ORM se puede cambiar tocando solo el repository |
+| Orden de middlewares: `authenticate → authorize → validate → controller` | Validar antes de autorizar | Un Cliente recibe `403` sin importar el body enviado; no se revelan las reglas de validación a quien no tiene permiso |
+| Errores de unicidad detectados por el código Prisma `P2002` | Consultar si el nombre existe antes de guardar | Evita condiciones de carrera entre dos creaciones simultáneas; se traduce a `409` con `details` en el campo `name` |
+| `PUT /api/vms/:id` acepta actualizaciones parciales | `PATCH` | El enunciado define `PUT`; permitir campos parciales simplifica acciones como encender/apagar (`{ "status": "RUNNING" }`). Un body vacío se rechaza con `400` |
+| Lógica del JWT centralizada en `lib/session.ts` | Firmar y verificar en cada lugar que lo necesite | Login, middleware y (más adelante) el socket usan las mismas funciones y opciones de cookie |
 
 *(pendiente: decisiones del frontend)*
 
@@ -118,7 +142,15 @@ vm-manager/
 - En producción, los errores 500 no exponen detalles internos.
 - `.env` fuera del repositorio; `.env.example` documenta las variables.
 
-*(pendiente: helmet, CORS, rate limit, autorización por rol, autenticación del socket)*
+- Autorización por rol en cada endpoint de escritura (`authorize('ADMIN')` → `403` para Cliente). Ocultar botones en el frontend es UX; la seguridad real está en el backend.
+- `401` (sin sesión o sesión inválida) diferenciado de `403` (sesión válida sin permiso).
+- `helmet` para cabeceras de seguridad (CSP, `nosniff`, frameguard) y para ocultar `X-Powered-By`.
+- CORS restringido a `CLIENT_ORIGIN` con `credentials: true`; nunca `*`.
+- Límite de 5 intentos fallidos de login por minuto por IP (`express-rate-limit`), con respuesta `429` en el formato de error estándar. Los logins exitosos no cuentan.
+- Parámetros de URL validados (`:id` debe ser UUID) antes de consultar la base.
+- Bodies JSON limitados a 10 KB.
+
+*(pendiente: autenticación del socket)*
 
 ---
 
@@ -130,6 +162,7 @@ vm-manager/
 
 ## Limitaciones y siguientes pasos
 
+- **Rate limit en memoria:** el contador vive en el proceso; se reinicia al reiniciar la API y no se comparte entre varias instancias. En producción se usaría un store compartido (p. ej. Redis).
 - **Logout con JWT stateless:** el logout elimina la cookie del navegador, pero el token sigue siendo válido hasta su expiración (8 h), porque el servidor no guarda sesiones. Mitigaciones posibles: expiración corta con *refresh tokens*, o una lista de tokens revocados (Redis / BD).
 
 ---
