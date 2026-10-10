@@ -1,3 +1,5 @@
+import { useDevStore } from "@/stores/dev-store";
+
 export interface FieldError {
   field: string;
   message: string;
@@ -25,12 +27,20 @@ export async function http<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const devHeaders: Record<string, string> =
+    import.meta.env.DEV && useDevStore.getState().simulateFailures
+      ? { "x-simulate-failure": "1" }
+      : {};
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
       ...options,
-      credentials: "include", // envía la cookie vm_session
-      headers: { "Content-Type": "application/json", ...options.headers },
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...devHeaders,
+        ...options.headers,
+      },
     });
   } catch {
     throw new ApiError(

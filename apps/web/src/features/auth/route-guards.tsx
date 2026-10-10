@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from "react-router";
 import { FullScreenLoader } from "@/components/full-screen-loader";
 import { useSession } from "./use-session";
+import type { UserRole } from "@vm/shared";
 
 export function ProtectedRoute() {
   const { data: user, isPending } = useSession();
@@ -17,5 +18,11 @@ export function PublicOnlyRoute() {
 
   if (isPending) return <FullScreenLoader />;
   if (user) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
+export function RequireRole({ role }: { role: UserRole }) {
+  const { data: user } = useSession();
+  if (user?.role !== role) return <Navigate to="/vms" replace />;
   return <Outlet />;
 }
