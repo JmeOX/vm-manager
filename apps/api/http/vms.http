@@ -1,0 +1,77 @@
+@baseUrl = http://localhost:4000/api
+
+### Login Admin
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@ifx.test", "password": "Admin123!" }
+
+### Login Cliente
+# @name loginClient
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "cliente@ifx.test", "password": "Cliente123!" }
+
+### Listar VMs como Cliente
+GET {{baseUrl}}/vms
+Cookie: {{loginClient.response.headers.Set-Cookie}}
+
+### Crear VM como Cliente
+POST {{baseUrl}}/vms
+Content-Type: application/json
+Cookie: {{loginClient.response.headers.Set-Cookie}}
+
+{ "name": "hack-01", "cores": 1, "ramGb": 1, "diskGb": 10, "os": "DEBIAN_12", "status": "STOPPED" }
+
+### Crear VM como Admin
+# @name createVm
+POST {{baseUrl}}/vms
+Content-Type: application/json
+Cookie: {{login.response.headers.Set-Cookie}}
+
+{ "name": "test-01", "cores": 2, "ramGb": 4, "diskGb": 40, "os": "UBUNTU_24_04", "status": "STOPPED" }
+
+### Crear VM duplicada
+POST {{baseUrl}}/vms
+Content-Type: application/json
+Cookie: {{login.response.headers.Set-Cookie}}
+
+{ "name": "test-01", "cores": 2, "ramGb": 4, "diskGb": 40, "os": "UBUNTU_24_04", "status": "STOPPED" }
+
+### Crear VM inválida
+POST {{baseUrl}}/vms
+Content-Type: application/json
+Cookie: {{login.response.headers.Set-Cookie}}
+
+{ "name": "Mala_VM", "cores": 0, "ramGb": -4, "diskGb": 5, "os": "MAC", "status": "ON" }
+
+### Encender la VM creada
+PUT {{baseUrl}}/vms/{{createVm.response.body.$.id}}
+Content-Type: application/json
+Cookie: {{login.response.headers.Set-Cookie}}
+
+{ "status": "RUNNING" }
+
+### Actualizar con body vacío
+PUT {{baseUrl}}/vms/{{createVm.response.body.$.id}}
+Content-Type: application/json
+Cookie: {{login.response.headers.Set-Cookie}}
+
+{}
+
+### Actualizar VM inexistente
+PUT {{baseUrl}}/vms/00000000-0000-4000-8000-000000000000
+Content-Type: application/json
+Cookie: {{login.response.headers.Set-Cookie}}
+
+{ "status": "RUNNING" }
+
+### ID inválido
+DELETE {{baseUrl}}/vms/hola
+Cookie: {{login.response.headers.Set-Cookie}}
+
+### Eliminar la VM creada
+DELETE {{baseUrl}}/vms/{{createVm.response.body.$.id}}
+Cookie: {{login.response.headers.Set-Cookie}}

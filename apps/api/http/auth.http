@@ -22,9 +22,12 @@ Content-Type: application/json
 
 { "email": "no-es-email", "password": "" }
 
-### ¿Quién soy? 
+### ¿Quién soy?
 GET {{baseUrl}}/auth/me
 Cookie: {{login.response.headers.Set-Cookie}}
+
+### ¿Quién soy? sin cookie
+GET {{baseUrl}}/auth/me
 
 ### Logout
 POST {{baseUrl}}/auth/logout

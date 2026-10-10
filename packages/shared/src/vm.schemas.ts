@@ -34,7 +34,11 @@ export const vmCreateSchema = z.object({
   status: z.enum(VM_STATUS),
 });
 
-export const vmUpdateSchema = vmCreateSchema.partial();
+export const vmUpdateSchema = vmCreateSchema
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Envía al menos un campo para actualizar",
+  });
 
 export type VmCreateInput = z.infer<typeof vmCreateSchema>;
 export type VmUpdateInput = z.infer<typeof vmUpdateSchema>;

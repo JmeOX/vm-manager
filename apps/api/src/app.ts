@@ -1,8 +1,9 @@
 import express from "express";
+import cookieParser from "cookie-parser";
 import { VM_STATUS } from "@vm/shared";
 import { authRouter } from "./modules/auth/auth.routes";
+import { vmsRouter } from "./modules/vms/vms.routes";
 import { errorHandler } from "./middleware/error-handler";
-import cookieParser from "cookie-parser";
 
 export function createApp() {
   const app = express();
@@ -12,6 +13,7 @@ export function createApp() {
     res.json({ status: "ok", vmStatuses: VM_STATUS });
   });
   app.use("/api/auth", authRouter);
+  app.use("/api/vms", vmsRouter); // ← nuevo
   app.use(errorHandler);
   return app;
 }
