@@ -35,11 +35,20 @@ cp apps/api/.env.example apps/api/.env
 # 3. Crear la base de datos SQLite, aplicar migraciones y cargar datos de prueba
 npm run db:setup -w apps/api
 
-# 4. Levantar la API
-npm run dev -w apps/api
+# 4. Levantar API (puerto 4000) y frontend (puerto 5173) con un solo comando
+npm run dev
 ```
 
-*(pendiente: levantar front y back con un solo comando)*
+Abrir **http://localhost:5173**. El frontend llama a la API a través del proxy de Vite, así que el navegador solo habla con `localhost:5173`.
+
+Otros comandos desde la raíz:
+
+| Comando | Qué hace |
+| --- | --- |
+| `npm run dev` | API + frontend en paralelo (`concurrently`) |
+| `npm test` | Tests de todos los paquetes |
+| `npm run typecheck` | Chequeo de tipos de todos los paquetes |
+| `npm run dev -w apps/api` | Solo la API |
 
 ---
 
@@ -139,7 +148,7 @@ vm-manager/
 │  │     ├─ realtime/     # Servidor Socket.io: autenticación del handshake y emisión de eventos
 │  │     ├─ app.ts        # Construye la app de Express (sin abrir puerto; usada por los tests)
 │  │     └─ server.ts     # Crea el servidor HTTP, monta Socket.io y abre el puerto
-│  └─ web/            # SPA (React + Vite)  (pendiente)
+│  └─ web/            # SPA (React + Vite + Tailwind + shadcn/ui)
 └─ packages/
    └─ shared/         # Esquemas Zod y tipos compartidos entre front y back
 ```
@@ -169,7 +178,16 @@ vm-manager/
 | Middleware `devSimulation` (solo desarrollo): latencia configurable y fallo a pedido con `x-simulate-failure: 1` | Probar el rollback apagando la API | Hace visibles la Optimistic UI y el rollback en local, donde la API responde en milisegundos y nunca falla. No tiene efecto en producción ni en tests |
 | Lógica del JWT centralizada en `lib/session.ts` | Firmar y verificar en cada lugar que lo necesite | Login, middleware y (más adelante) el socket usan las mismas funciones y opciones de cookie |
 
-*(pendiente: decisiones del frontend)*
+### Frontend
+
+| Decisión | Alternativa descartada | Motivo |
+| --- | --- | --- |
+| SPA con Vite + React + TypeScript | Next.js | El enunciado pide una SPA; el renderizado en servidor de Next no aporta aquí y agrega complejidad. Vite arranca al instante |
+| Proxy de Vite para `/api` y `/socket.io` | Llamar directo a `localhost:4000` con CORS | El navegador ve un **solo origen**: la cookie `SameSite=Strict` viaja sin configuración extra y no hay peticiones *cross-site* |
+| Tailwind CSS v4 + shadcn/ui (estilo Vega, primitivas Radix UI) | Librería de componentes cerrada (MUI, Chakra) | Los componentes se copian al proyecto y se adaptan; Radix aporta accesibilidad (teclado, foco, ARIA). Se mantuvieron las rutas por defecto de shadcn (`components/ui`, `lib`) para no pelear con la herramienta |
+| Tema claro/oscuro/sistema con script en `index.html` | Aplicar el tema solo desde React | El script aplica la clase `dark` antes del primer pintado: no hay destello claro al recargar en modo oscuro. La preferencia (no sensible) se guarda en `localStorage` |
+| Tipografía Geist / Geist Mono (`@fontsource`) | Fuentes del sistema o CDN | Fidelidad con el mockup; fuentes servidas localmente, sin dependencia de terceros en tiempo de ejecución |
+| Mockup previo (escritorio y móvil) | Diseñar mientras se programa | Define pantallas, componentes, estados (carga, vacío, error, optimista, en vivo) y la diferencia Admin/Cliente antes de escribir código |
 
 ---
 
