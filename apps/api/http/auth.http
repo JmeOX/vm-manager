@@ -31,3 +31,11 @@ GET {{baseUrl}}/auth/me
 
 ### Logout
 POST {{baseUrl}}/auth/logout
+
+### CORS origen permitido
+GET {{baseUrl}}/health
+Origin: http://localhost:5173
+
+### CORS origen no permitido
+GET {{baseUrl}}/health
+Origin: http://sitio-malicioso.com
