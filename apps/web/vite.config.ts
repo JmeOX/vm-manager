@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -12,10 +13,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // proxy: el navegador solo ve localhost:5173; Vite reenvía estas rutas a la API.
     proxy: {
       "/api": API_URL,
-      "/socket.io": { target: API_URL, ws: true }, // ws: true → también reenvía WebSockets
+      "/socket.io": { target: API_URL, ws: true },
     },
+  },
+  test: {
+    environment: "jsdom",
+    setupFiles: "./src/test/setup.ts",
+    css: false,
   },
 });
