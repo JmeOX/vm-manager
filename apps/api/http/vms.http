@@ -31,14 +31,14 @@ POST {{baseUrl}}/vms
 Content-Type: application/json
 Cookie: {{login.response.headers.Set-Cookie}}
 
-{ "name": "test-01", "cores": 2, "ramGb": 4, "diskGb": 40, "os": "UBUNTU_24_04", "status": "STOPPED" }
+{ "name": "test-{{$randomInt 100 999}}", "cores": 2, "ramGb": 4, "diskGb": 40, "os": "UBUNTU_24_04", "status": "STOPPED" }
 
 ### Crear VM duplicada
 POST {{baseUrl}}/vms
 Content-Type: application/json
 Cookie: {{login.response.headers.Set-Cookie}}
 
-{ "name": "test-01", "cores": 2, "ramGb": 4, "diskGb": 40, "os": "UBUNTU_24_04", "status": "STOPPED" }
+{ "name": "{{createVm.response.body.$.name}}", "cores": 2, "ramGb": 4, "diskGb": 40, "os": "UBUNTU_24_04", "status": "STOPPED" }
 
 ### Crear VM inválida
 POST {{baseUrl}}/vms

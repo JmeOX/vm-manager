@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc -p .",
+    "socket:probe": "tsx scripts/socket-probe.ts",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:setup": "prisma migrate reset --force",
@@ -18,6 +19,7 @@
     "@prisma/client": "^6.19.3",
     "@vm/shared": "*",
     "bcryptjs": "^3.0.3",
+    "cookie": "^0.7.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^18.0.7",
@@ -25,14 +27,17 @@
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
+    "socket.io": "^4.8.4",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/cookie": "^0.6.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.5",
-    "prisma": "^6.19.3"
+    "prisma": "^6.19.3",
+    "socket.io-client": "^4.8.4"
   }
 }

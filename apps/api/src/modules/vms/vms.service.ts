@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { Vm, VmCreateInput, VmUpdateInput } from "@vm/shared";
 import { HttpError } from "../../lib/http-error";
+import { realtime } from "../../realtime/socket";
 import { vmsRepository } from "./vms.repository";
 
 function isUniqueNameError(error: unknown): boolean {
@@ -28,6 +29,7 @@ export async function list(): Promise<Vm[]> {
 export async function create(input: VmCreateInput): Promise<Vm> {
   try {
     const vm = await vmsRepository.create(input);
+    realtime.vmCreated(vm);
     return vm;
   } catch (error) {
     if (isUniqueNameError(error)) throw nameTaken();
@@ -39,6 +41,7 @@ export async function update(id: string, input: VmUpdateInput): Promise<Vm> {
   await ensureExists(id);
   try {
     const vm = await vmsRepository.update(id, input);
+    realtime.vmUpdated(vm);
     return vm;
   } catch (error) {
     if (isUniqueNameError(error)) throw nameTaken();
@@ -49,4 +52,5 @@ export async function update(id: string, input: VmUpdateInput): Promise<Vm> {
 export async function remove(id: string): Promise<void> {
   await ensureExists(id);
   await vmsRepository.remove(id);
+  realtime.vmDeleted(id);
 }
