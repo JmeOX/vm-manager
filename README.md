@@ -6,11 +6,9 @@ SPA para gestionar máquinas virtuales con roles (Administrador / Cliente), Opti
 
 ![Demo: el Administrador apaga una VM y la ventana del Cliente se actualiza en vivo; con "Simular fallos" el cambio se revierte](docs/screenshots/demo.gif)
 
-<!-- Capturas: descomentar cuando existan los PNG en docs/screenshots/
 | Dashboard (oscuro)                                | Listado como Cliente (claro)                                  | Validación en tiempo real                           | Móvil                                 |
 | ------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------- |
 | ![Dashboard](docs/screenshots/dashboard-dark.png) | ![Listado del Cliente](docs/screenshots/vms-client-light.png) | ![Formulario](docs/screenshots/form-validation.png) | ![Móvil](docs/screenshots/mobile.png) |
--->
 
 **Contenido:** [Características](#características) · [Inicio rápido](#inicio-rápido) · [Credenciales](#credenciales-de-prueba) · [Cómo probar](#cómo-probar-lo-importante) · [API](#probar-la-api) · [Arquitectura](#arquitectura) · [Decisiones](#decisiones-arquitectónicas) · [Seguridad](#seguridad) · [Testing](#testing) · [Bitácora de IA](#bitácora-de-ia)
 
