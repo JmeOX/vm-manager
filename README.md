@@ -1,4 +1,4 @@
-# VM Manager — Prueba Técnica Full Stack (IFX)
+# VM Manager
 
 [![CI](https://github.com/JmeOX/vm-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/JmeOX/vm-manager/actions/workflows/ci.yml)
 
